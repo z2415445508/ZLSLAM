@@ -26,6 +26,10 @@ from argparse import ArgumentParser, Namespace
 
 from ultralytics import YOLO
 
+# 导入光流一致性检测模块
+from optical_flow_consistency import FlowConsistencyDetector
+from RAFT.raft import RAFT
+
 
 def merge_hparams(args, config):
     params = ["ModelHiddenParams"]
@@ -105,9 +109,46 @@ class SLAM:
 
         self.config["Results"]["save_dir"] = save_dir
         self.config["Training"]["monocular"] = self.monocular
+        
+        # 初始化光流一致性检测器
+        if self.config.get("FlowConsistency", {}).get("enabled", False):
+            Log("初始化光流一致性检测器...")
+            try:
+                # 加载RAFT光流模型
+                args = Namespace()
+                args.small = False
+                args.mixed_precision = False
+                flow_model = RAFT(args)
+                
+                # 尝试加载预训练权重
+                raft_model_path = 'pretrained/raft-things.pth'
+                if os.path.exists(raft_model_path):
+                    checkpoint = torch.load(raft_model_path)
+                    flow_model.load_state_dict(checkpoint)
+                    Log(f"已加载RAFT模型: {raft_model_path}")
+                else:
+                    Log(f"警告: 未找到RAFT模型 {raft_model_path}，将使用未训练的模型")
+                
+                flow_model = flow_model.cuda()
+                flow_model.eval()
+                
+                # 初始化检测器
+                flow_detector = FlowConsistencyDetector(
+                    self.config["FlowConsistency"],
+                    flow_model
+                )
+                Log("光流一致性检测器初始化完成")
+            except Exception as e:
+                Log(f"光流一致性检测器初始化失败: {e}")
+                flow_detector = None
+        else:
+            flow_detector = None
 
         self.frontend = FrontEnd(self.config)
         self.backend = BackEnd(self.config)
+        
+        # 将光流检测器传递给前端
+        self.frontend.flow_detector = flow_detector
 
         self.frontend.dataset = self.dataset
         self.frontend.background = self.background

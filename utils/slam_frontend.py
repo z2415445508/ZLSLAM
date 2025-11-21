@@ -112,6 +112,10 @@ class FrontEnd(mp.Process):
         self.pause = False
         self.dynamic_model = config["model_params"]["dynamic_model"]
         self.dynamic_objects = 0
+        
+        # 光流一致性检测器（将在slam.py中设置）
+        self.flow_detector = None
+        self.use_flow_consistency = config.get("FlowConsistency", {}).get("enabled", False)
 
     def set_hyperparams(self):
         self.save_dir = self.config["Results"]["save_dir"]
@@ -335,22 +339,61 @@ class FrontEnd(mp.Process):
     def tracking(self, cur_frame_idx, viewpoint, last_keyframe_idx):
         prev = self.cameras[cur_frame_idx - self.use_every_n_frames]
         
-        
         viewpoint.update_RT(prev.R, prev.T)
         
-        #viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
-        #with torch.no_grad():
-        #    render_pkg = render(
-        #            viewpoint, self.gaussians, self.pipeline_params, self.background, dynamic=False
-        #    )
-        #    image, depth, opacity = (
-        #            render_pkg["render"],
-        #            render_pkg["depth"],
-        #            render_pkg["opacity"],
-        #    )
-        #    self.median_depth = get_median_depth(depth, opacity)
-        #return render_pkg
-        
+        # 光流一致性动态检测
+        if self.use_flow_consistency and self.flow_detector is not None and cur_frame_idx > 0:
+            try:
+                # 获取前一帧
+                prev_frame = self.cameras[cur_frame_idx - 1]
+                
+                # 准备相机内参矩阵
+                K = torch.tensor([
+                    [self.dataset.fx, 0, self.dataset.cx],
+                    [0, self.dataset.fy, self.dataset.cy],
+                    [0, 0, 1.0]
+                ], dtype=torch.float32, device=self.device)
+                
+                # 准备位姿矩阵（World to Camera）
+                from gaussian_splatting.utils.graphics_utils import getWorld2View2
+                pose_prev = getWorld2View2(prev_frame.R, prev_frame.T)
+                pose_curr = getWorld2View2(viewpoint.R, viewpoint.T)
+                
+                # 检测动态区域
+                detection_results = self.flow_detector.detect_dynamic_regions(
+                    frame_t=prev_frame.original_image,
+                    frame_t1=viewpoint.original_image,
+                    pose_t=pose_prev,
+                    pose_t1=pose_curr,
+                    depth_t=torch.from_numpy(prev_frame.depth).to(self.device),
+                    K=K,
+                    return_details=False
+                )
+                
+                # 获取动态掩码
+                dynamic_mask = detection_results['dynamic_mask']
+                
+                # 融合到现有的motion_mask
+                if hasattr(viewpoint, 'motion_mask') and viewpoint.motion_mask is not None:
+                    # motion_mask: True表示静态，False表示动态
+                    # dynamic_mask: True表示动态，False表示静态
+                    # 取并集：原有动态 + 新检测动态
+                    combined_dynamic = torch.logical_or(
+                        ~viewpoint.motion_mask.to(self.device),
+                        dynamic_mask
+                    )
+                    viewpoint.motion_mask = ~combined_dynamic  # 转回静态掩码
+                else:
+                    # 如果没有motion_mask，创建一个
+                    viewpoint.motion_mask = ~dynamic_mask  # 静态区域为True
+                
+                # 记录检测信息
+                if cur_frame_idx % 50 == 0:
+                    dynamic_ratio = dynamic_mask.float().mean().item()
+                    Log(f"Frame {cur_frame_idx}: 光流一致性检测 - 动态像素比例: {dynamic_ratio:.2%}")
+                    
+            except Exception as e:
+                Log(f"光流一致性检测出错 (Frame {cur_frame_idx}): {e}")
         
         opt_params = []
         opt_params.append(

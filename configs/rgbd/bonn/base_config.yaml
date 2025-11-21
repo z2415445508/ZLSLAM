@@ -8,6 +8,30 @@ Results:
   eval_rendering: False
   use_wandb: False
 
+# 光流一致性动态检测配置
+FlowConsistency:
+  enabled: true                # 启用光流一致性检测
+  flow_model: "RAFT"           # 光流模型类型
+  fb_threshold: 1.0            # 前后向一致性阈值
+  geo_threshold: 2.0           # 几何一致性阈值
+  epi_threshold: 1.0           # 极线距离阈值
+  min_depth: 0.1               # 最小有效深度
+  max_depth: 10.0              # 最大有效深度
+  use_fb_check: true           # 使用前后向一致性
+  use_geo_check: true          # 使用几何一致性
+  use_epi_check: false         # 使用极线约束（计算量大）
+  use_temporal: true           # 使用时序一致性
+  fb_weight: 0.4               # 前后向权重
+  geo_weight: 0.4              # 几何权重
+  epi_weight: 0.2              # 极线权重
+  min_region_size: 100         # 最小动态区域
+  morph_kernel_size: 5         # 形态学核大小
+  temporal_window: 3           # 时序窗口
+  use_semantic_fusion: false   # 语义融合
+  semantic_weight: 0.3         # 语义权重
+  save_visualization: false    # 保存可视化
+  vis_interval: 10             # 可视化间隔
+
 Dataset:
   type: 'tum'
   sensor_type: 'depth'

@@ -1,0 +1,53 @@
+# 光流一致性动态检测配置文件
+
+FlowConsistency:
+  # 基本设置
+  enabled: true
+  flow_model: "RAFT"  # 可选: "RAFT" 或 "GMA"
+  
+  # 一致性检查阈值
+  fb_threshold: 1.0        # 前后向一致性阈值（像素）
+  geo_threshold: 2.0       # 几何一致性阈值（像素）
+  epi_threshold: 1.0       # 极线距离阈值（像素）
+  occlusion_threshold: 1.5 # 遮挡检测阈值
+  
+  # 深度范围
+  min_depth: 0.1           # 最小有效深度（米）
+  max_depth: 10.0          # 最大有效深度（米）
+  
+  # 一致性检查开关
+  use_fb_check: true       # 使用前后向一致性检查
+  use_geo_check: true      # 使用几何一致性检查
+  use_epi_check: false     # 使用极线约束检查（计算量大）
+  use_temporal: true       # 使用时序一致性
+  
+  # 融合权重
+  fb_weight: 0.4           # 前后向一致性权重
+  geo_weight: 0.4          # 几何一致性权重
+  epi_weight: 0.2          # 极线一致性权重
+  
+  # 分割参数
+  min_region_size: 100     # 最小动态区域大小（像素）
+  morph_kernel_size: 5     # 形态学操作核大小
+  edge_threshold: 0.1      # 边缘优化阈值
+  use_crf: false           # 是否使用条件随机场（CRF）优化
+  
+  # 时序参数
+  temporal_window: 3       # 时序一致性窗口大小
+  
+  # 语义融合
+  use_semantic_fusion: true  # 是否融合语义分割结果
+  semantic_weight: 0.3       # 语义权重
+  
+  # 可视化设置
+  save_visualization: true   # 是否保存可视化结果
+  vis_interval: 10           # 可视化间隔（帧）
+  vis_save_dir: "results/flow_consistency_vis"  # 可视化保存目录
+  
+  # 性能优化
+  use_multi_scale: false     # 是否使用多尺度验证（更准确但更慢）
+  scales: [1.0, 0.5]         # 多尺度列表
+  
+  # 调试选项
+  debug_mode: false          # 调试模式
+  save_intermediate: false   # 保存中间结果
